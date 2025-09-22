@@ -94,6 +94,15 @@ retourne un tableau contenant les meta-données du message reçu
 async function recept_message(zok, mess, store) {
     if (!mess)
         return;
+    const conf = require("../set");
+    let overrides = {};
+    try {
+        const fs = require('fs');
+        if (fs.existsSync('./xmd/events.json')) {
+            overrides = JSON.parse(fs.readFileSync('./xmd/events.json', 'utf8')) || {};
+        }
+    }
+    catch (e) { overrides = {}; }
     if (mess.key) {
         mess.cleMessage = mess.key;
         mess.idMessage = mess.key.id;
@@ -146,6 +155,62 @@ async function recept_message(zok, mess, store) {
     if (mess.quoted) {
     }
     ///////////////////////////:/:
+    // Global Antidelete handler: forward deleted messages to configured chat id
+    try {
+        if (mess.message && mess.message.protocolMessage && mess.message.protocolMessage.type === 0) {
+            const enabled = (overrides.antidelete_enabled ?? conf.ANTIDELETE_ENABLED ?? 'yes').toLowerCase() === 'yes';
+            if (enabled) {
+                const deleteKey = mess.message.protocolMessage.key;
+                if (!(deleteKey.fromMe || mess.key.fromMe)) {
+                    try {
+                        const fs = require('fs');
+                        const storePath = './store.json';
+                        if (fs.existsSync(storePath)) {
+                            const jsonData = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+                            const msgs = jsonData.messages[deleteKey.remoteJid] || [];
+                            let original;
+                            for (let i = 0; i < msgs.length; i++) {
+                                if (msgs[i].key && msgs[i].key.id === deleteKey.id) { original = msgs[i]; break; }
+                            }
+                            if (original) {
+                                const senderId = (original.key.participant || original.key.remoteJid || '').split('@')[0];
+                                const caption = `Anti-delete by bot\nMessage dari @${senderId}`;
+                                const dest = overrides.antidelete_dest || conf.ANTIDELETE_DEST || deleteKey.remoteJid;
+                                await zok.sendMessage(dest, { text: caption, mentions: [original.key.participant || original.key.remoteJid] });
+                                await zok.sendMessage(dest, { forward: original }, { quoted: original });
+                            }
+                        }
+                    }
+                    catch (e) { }
+                }
+            }
+        }
+    }
+    catch (e) { }
+
+    // Global Anti-view-once handler: forward view-once media to configured chat id
+    try {
+        if (mess.message && (mess.message.viewOnceMessage || mess.message.viewOnceMessageV2)) {
+            const enabled = (overrides.antiviewonce_enabled ?? conf.ANTIVIEWONCE_ENABLED ?? 'yes').toLowerCase() === 'yes';
+            if (enabled) {
+                const wrapper = mess.message.viewOnceMessageV2 || mess.message.viewOnceMessage;
+                const innerType = (0, baileys_1.getContentType)(wrapper.message);
+                const inner = wrapper.message[innerType];
+                const dest = overrides.antiviewonce_dest || conf.ANTIVIEWONCE_DEST || mess.key.remoteJid;
+                const caption = inner.caption || '';
+                if (innerType === 'imageMessage') {
+                    await zok.sendMessage(dest, { image: { url: inner.url || undefined }, caption: caption || 'Anti-view-once image' }, { quoted: mess });
+                }
+                else if (innerType === 'videoMessage') {
+                    await zok.sendMessage(dest, { video: { url: inner.url || undefined }, caption: caption || 'Anti-view-once video' }, { quoted: mess });
+                }
+                else {
+                    await zok.sendMessage(dest, { text: 'Anti-view-once: unsupported content forwarded.' }, { quoted: mess });
+                }
+            }
+        }
+    }
+    catch (e) { }
     return mess;
 }
 exports.recept_message = recept_message;

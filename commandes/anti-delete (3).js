@@ -1,73 +1,39 @@
 const { zokou } = require("../framework/zokou");
 const fs = require('fs');
 
-
-let antiDeleteActive = true; // Variable pour stocker l'état de la commande anti-delete
-
-zokou({
-  nomCom: "antidelete on",
-  categorie: "General",
-  reaction: "🛑"
-}, async (origineMessage, zk, commandeOptions) => {
-  const { ms, arg } = commandeOptions;
-
-  // Vérifier si un argument est fourni pour activer ou désactiver la commande
-  if (arg[0]) {
-    const action = arg[0].toLowerCase();
-    if (action === "off") {
-      antiDeleteActive = true;
-      await zk.sendMessage(origineMessage, "La commande anti-delete est activée.");
-      return;
-    } else if (action === "on") {
-      antiDeleteActive = true;
-      await zk.sendMessage(origineMessage, "La commande anti-delete est désactivée.");
-      return;
-    }
+zokou({ nomCom: "antidelete", categorie: "General", reaction: "🛡️" }, async (dest, zk, { arg, ms, repondre }) => {
+  const overridesPath = './xmd/events.json';
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(overridesPath, 'utf8')); } catch {}
+  const sub = (arg[0] || '').toLowerCase();
+  const onoff = (arg[1] || '').toLowerCase();
+  if (sub === 'on' || sub === 'off') {
+    cfg.antidelete_enabled = sub === 'on' ? 'yes' : 'no';
+    fs.writeFileSync(overridesPath, JSON.stringify(cfg, null, 2));
+    return repondre(`Antidelete: ${cfg.antidelete_enabled}`);
   }
-
-  // Vérifier si la commande anti-delete est activée
-  if (!antiDeleteActive) {
-    await zk.sendMessage(origineMessage, "La commande anti-delete est actuellement désactivée.");
-    return;
+  if (sub === 'set' && arg[1]) {
+    cfg.antidelete_dest = arg[1];
+    fs.writeFileSync(overridesPath, JSON.stringify(cfg, null, 2));
+    return repondre(`Antidelete destination set: ${cfg.antidelete_dest}`);
   }
+  return repondre('Usage: antidelete on|off OR antidelete set <jid>');
+});
 
-  if (ms.message.protocolMessage && ms.message.protocolMessage.type === 0 && (conf.ADM).toLowerCase() === 'yes') {
-    if (ms.key.fromMe || ms.message.protocolMessage.key.fromMe) {
-      console.log('Message supprimé me concernant');
-      return;
-    }
-
-    console.log('Message supprimé');
-    const key = ms.message.protocolMessage.key;
-
-    try {
-      const st = './store.json';
-      const data = fs.readFileSync(st, 'utf8');
-      const jsonData = JSON.parse(data);
-      const message = jsonData.messages[key.remoteJid];
-
-      let msg;
-
-      for (let i = 0; i < message.length; i++) {
-        if (message[i].key.id === key.id) {
-          msg = message[i];
-          break;
-        }
-      }
-
-      if (!msg) {
-        console.log('Message introuvable');
-        return;
-      }
-
-      const senderId = msg.key.participant.split('@')[0];
-      const caption = ` Anti-delete-message by Charleske\nMessage de @${senderId}`;
-      const imageCaption = { image: { url: './media/deleted-message.jpg' }, caption, mentions: [msg.key.participant] };
-
-      await zk.sendMessage(idBot, imageCaption);
-      await zk.sendMessage(idBot, { forward: msg }, { quoted: msg });
-    } catch (error) {
-      console.error(error);
-    }
+zokou({ nomCom: "antiviewonce", categorie: "General", reaction: "🛡️" }, async (dest, zk, { arg, ms, repondre }) => {
+  const overridesPath = './xmd/events.json';
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(overridesPath, 'utf8')); } catch {}
+  const sub = (arg[0] || '').toLowerCase();
+  if (sub === 'on' || sub === 'off') {
+    cfg.antiviewonce_enabled = sub === 'on' ? 'yes' : 'no';
+    fs.writeFileSync(overridesPath, JSON.stringify(cfg, null, 2));
+    return repondre(`Antiviewonce: ${cfg.antiviewonce_enabled}`);
   }
+  if (sub === 'set' && arg[1]) {
+    cfg.antiviewonce_dest = arg[1];
+    fs.writeFileSync(overridesPath, JSON.stringify(cfg, null, 2));
+    return repondre(`Antiviewonce destination set: ${cfg.antiviewonce_dest}`);
+  }
+  return repondre('Usage: antiviewonce on|off OR antiviewonce set <jid>');
 });
